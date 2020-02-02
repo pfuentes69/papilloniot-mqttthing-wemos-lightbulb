@@ -40,193 +40,6 @@ int buttonState;             // the current reading from the input pin
 int lastButtonState = LOW;   // the previous reading from the input pin
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 
-void setup() {
-  // initialize serial for debugging
-  Serial.begin(115200);
-  Serial.println("<<<<< SETUP START >>>>>");
-  // initialize WiFi
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-
-  bool connectingWIFI = true;
-  int tries = 0;
-
-  Serial.println("Trying Main WiFi");
-  while ((WiFi.status() != WL_CONNECTED) && (tries < 10)) {
-    delay(500);
-    Serial.print(".");
-    tries++;
-  }
-  Serial.println();
-    
-  if (tries >= 10) {
-    Serial.println("Too many trials, no WiFi connection was possible");
-  } else {
-    Serial.println("");
-    Serial.println("WiFi connected");  
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-  
-    //connect to MQTT server
-    client.setServer(server, 1883);
-    client.setCallback(callback);
-  
-  //  client.connect("dev02", "dev02", "dev02");
-    reconnect();
-    Serial.println("Network OK");
-  }
-
-  // Set Relay
-  pinMode(relayPin, OUTPUT);
-
-  // initialize digital pin LED_BUILTIN as an output.
-  pinMode(ledPin, OUTPUT);
-
-  // Set Button
-  pinMode(buttonPin, INPUT_PULLUP);
-
-  // Estado inicial
-  controlLampara(estadoLampara);
-  Serial.println("<<<<< SETUP END >>>>>");
-}
-
-void loop() {
-  viejoEstadoLampara = estadoLampara;
-
-  // First we check if the WiFi is still OK, or we reconnect
-  if (WiFi.status() != WL_CONNECTED) {
-    bool connectingWIFI = true;
-    int tries = 0;
-  
-    Serial.println("Trying Main WiFi");
-    while ((WiFi.status() != WL_CONNECTED) && (tries < 10)) {
-      delay(500);
-      Serial.print(".");
-      tries++;
-    }
-    Serial.println();
-      
-    if (tries >= 10) {
-      Serial.println("Too many trials, no WiFi connection was possible");
-    } else {
-      Serial.println("");
-      Serial.println("WiFi connected");  
-      Serial.println("IP address: ");
-      Serial.println(WiFi.localIP());
-    
-      //connect to MQTT server
-      client.setServer(server, 1883);
-      client.setCallback(callback);    
-      reconnect();
-      Serial.println("Network OK");
-    }
-  } else {
-    // WiFi is OK, we loop the MQTT client
-    if (!client.connected()) {
-      reconnect();
-    } 
-    client.loop();  
-  }
-
-  // Update Lampara Status and sensors
-  updateLampara();
-
-  // Check new status
-  if (estadoLampara != viejoEstadoLampara) {
-     // set the Lampara:
-    controlLampara(estadoLampara);
-  }
-}
-
-/////////////////////////////////////
-//
-// MQTT FUNCTIONS
-//
-/////////////////////////////////////
-
-//print any message received for subscribed topic
-void callback(char* topic, byte* payload, unsigned int length) {
-  String sTopic = topic;
-  String sCommand = sTopic.substring(sTopic.lastIndexOf("/") + 1);
-
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-
-  String sPayload = "";
-  for (int i=0;i<length;i++) {
-    sPayload += (char)payload[i];
-  }
-  Serial.println(sPayload);
-
-  Serial.println("Command: " + sCommand);
-
-  if (sCommand == "ledoff") {
-      if (sPayload == "ON") {
-        controlLED(true);
-      } else {
-        controlLED(false);
-      }
-  } else if (sCommand == "relay") {
-      forzarEstado = true;
-      if (sPayload == "ON") {
-        estadoLampara = true;
-      } else {
-        estadoLampara = false;
-      }
-  } else if (sCommand == "cmd1off") {
-    Serial.println("Comando 1, Payload: " + sPayload);
-    controlLED(true);
-    delay(100);    
-    controlLED(false);
-    digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-  } else if (sCommand == "cmd2off") {
-    Serial.println("Comando 2, Payload: " + sPayload);
-    controlLED(true);
-    delay(100);    
-    controlLED(false);
-    delay(200);
-    controlLED(true);
-    delay(100);    
-    controlLED(false);
-  } else if (sCommand == "cmd3off") {
-    Serial.println("Comando 3, Payload: " + sPayload);
-    controlLED(true);
-    delay(100);    
-    controlLED(false);
-    delay(200);    
-    controlLED(true);
-    delay(100);    
-    controlLED(false);
-    delay(200);    
-    controlLED(true);
-    delay(100);    
-    controlLED(false);
-  } else {    
-      Serial.println("Invalid command!");
-  }
-
-}
-
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect, just a name to identify the client
-    if (client.connect(devID, devUS, devPW)) {
-      Serial.println("connected");
-      // ... and resubscribe
-      client.subscribe(devTopic);
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
-  }
-}
-
 /////////////////////////////////////
 //
 // CUSTOM HW FUNCITONS
@@ -335,3 +148,202 @@ void updateLampara()
 
 }
 
+
+/////////////////////////////////////
+//
+// MQTT FUNCTIONS
+//
+/////////////////////////////////////
+
+//print any message received for subscribed topic
+void callback(char* topic, byte* payload, unsigned int length) {
+  String sTopic = topic;
+  String sCommand = sTopic.substring(sTopic.lastIndexOf("/") + 1);
+
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+
+  String sPayload = "";
+  for (int i=0;i<length;i++) {
+    sPayload += (char)payload[i];
+  }
+  Serial.println(sPayload);
+
+  Serial.println("Command: " + sCommand);
+
+  if (sCommand == "ledoff") {
+      if (sPayload == "ON") {
+        controlLED(true);
+      } else {
+        controlLED(false);
+      }
+  } else if (sCommand == "relay") {
+      forzarEstado = true;
+      if (sPayload == "ON") {
+        estadoLampara = true;
+      } else {
+        estadoLampara = false;
+      }
+  } else if (sCommand == "cmd1off") {
+    Serial.println("Comando 1, Payload: " + sPayload);
+    controlLED(true);
+    delay(100);    
+    controlLED(false);
+    digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+  } else if (sCommand == "cmd2off") {
+    Serial.println("Comando 2, Payload: " + sPayload);
+    controlLED(true);
+    delay(100);    
+    controlLED(false);
+    delay(200);
+    controlLED(true);
+    delay(100);    
+    controlLED(false);
+  } else if (sCommand == "cmd3off") {
+    Serial.println("Comando 3, Payload: " + sPayload);
+    controlLED(true);
+    delay(100);    
+    controlLED(false);
+    delay(200);    
+    controlLED(true);
+    delay(100);    
+    controlLED(false);
+    delay(200);    
+    controlLED(true);
+    delay(100);    
+    controlLED(false);
+  } else {    
+      Serial.println("Invalid command!");
+  }
+
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect, just a name to identify the client
+    if (client.connect(devID, devUS, devPW)) {
+      Serial.println("connected");
+      // ... and resubscribe
+      client.subscribe(devTopic);
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+/////////////////////////////////////
+//
+// Setup board
+//
+/////////////////////////////////////
+
+void setup() {
+  // initialize serial for debugging
+  Serial.begin(115200);
+  Serial.println("<<<<< SETUP START >>>>>");
+  // initialize WiFi
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+
+  bool connectingWIFI = true;
+  int tries = 0;
+
+  Serial.println("Trying Main WiFi");
+  while ((WiFi.status() != WL_CONNECTED) && (tries < 10)) {
+    delay(500);
+    Serial.print(".");
+    tries++;
+  }
+  Serial.println();
+    
+  if (tries >= 10) {
+    Serial.println("Too many trials, no WiFi connection was possible");
+  } else {
+    Serial.println("");
+    Serial.println("WiFi connected");  
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+  
+    //connect to MQTT server
+    client.setServer(server, 1883);
+    client.setCallback(callback);
+  
+  //  client.connect("dev02", "dev02", "dev02");
+    reconnect();
+    Serial.println("Network OK");
+  }
+
+  // Set Relay
+  pinMode(relayPin, OUTPUT);
+
+  // initialize digital pin LED_BUILTIN as an output.
+  pinMode(ledPin, OUTPUT);
+
+  // Set Button
+  pinMode(buttonPin, INPUT_PULLUP);
+
+  // Estado inicial
+  controlLampara(estadoLampara);
+  Serial.println("<<<<< SETUP END >>>>>");
+}
+
+/////////////////////////////////////
+//
+// Process loop
+//
+/////////////////////////////////////
+
+void loop() {
+  viejoEstadoLampara = estadoLampara;
+
+  // First we check if the WiFi is still OK, or we reconnect
+  if (WiFi.status() != WL_CONNECTED) {
+    bool connectingWIFI = true;
+    int tries = 0;
+  
+    Serial.println("Trying Main WiFi");
+    while ((WiFi.status() != WL_CONNECTED) && (tries < 10)) {
+      delay(500);
+      Serial.print(".");
+      tries++;
+    }
+    Serial.println();
+      
+    if (tries >= 10) {
+      Serial.println("Too many trials, no WiFi connection was possible");
+    } else {
+      Serial.println("");
+      Serial.println("WiFi connected");  
+      Serial.println("IP address: ");
+      Serial.println(WiFi.localIP());
+    
+      //connect to MQTT server
+      client.setServer(server, 1883);
+      client.setCallback(callback);    
+      reconnect();
+      Serial.println("Network OK");
+    }
+  } else {
+    // WiFi is OK, we loop the MQTT client
+    if (!client.connected()) {
+      reconnect();
+    } 
+    client.loop();  
+  }
+
+  // Update Lampara Status and sensors
+  updateLampara();
+
+  // Check new status
+  if (estadoLampara != viejoEstadoLampara) {
+     // set the Lampara:
+    controlLampara(estadoLampara);
+  }
+}
