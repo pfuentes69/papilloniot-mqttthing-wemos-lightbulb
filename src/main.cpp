@@ -3,23 +3,21 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
-//IPAddress server(192,168,2,10); // Casa
-
-IPAddress server(35,178,36,205); // Solace
+IPAddress broker(192, 168, 2, 101); // Solace
 
 const int relayPin = D1;
 const int ledPin = D4;
-const int buttonPin = D5;
+const int buttonPin = D3;
 const int LDRPin = A0;
 
 const char* ssid     = "Papillon"; //Naviter"; //
 const char* password = "70445312"; //N4v1t3rWIFI2015"; //
 
-const char* devID = "dev02";
-const char* devUS = "dev02";
-const char* devPW = "dev02";
+const char* devID = "Lamp1";
+// const char* devUS = "dev02";
+// const char* devPW = "dev02";
 
-const char* devTopic = "PapillonIoT/dev02/cmd/+";
+const char* devTopic = "PapillonIoT/Lamp1/cmd/+";
 
 const unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
@@ -165,7 +163,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("] ");
 
   String sPayload = "";
-  for (int i=0;i<length;i++) {
+  for (unsigned int i=0; i < length; i++) {
     sPayload += (char)payload[i];
   }
   Serial.println(sPayload);
@@ -219,22 +217,53 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 }
 
-void reconnect() {
+bool mqttReconnect() {
+  int tries = 0;
   // Loop until we're reconnected
-  while (!client.connected()) {
+  while (!client.connected() && (tries < 10)) {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect, just a name to identify the client
-    if (client.connect(devID, devUS, devPW)) {
+    if (client.connect(devID)) { //}, devUS, devPW)) {
       Serial.println("connected");
       // ... and resubscribe
       client.subscribe(devTopic);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
+      Serial.println(" try again in 3 seconds");
       // Wait 5 seconds before retrying
-      delay(5000);
+      delay(3000);
+      tries++;
     }
+  }
+  if (tries == 10) {
+    Serial.println("Too many trials, no MQTT connection was possible");
+    return false;
+  } else {
+    return true;
+  }
+}
+
+bool connectNetwork(bool outDebug = true) {
+  int tries = 0;
+
+  if (outDebug) Serial.println("Trying Main WiFi");
+  while ((WiFi.status() != WL_CONNECTED) && (tries < 10)) {
+    delay(500);
+    if (outDebug) Serial.print(".");
+    tries++;
+  }
+  if (outDebug) Serial.println();
+    
+  if (tries == 10) {
+    Serial.println("Too many trials, no WiFi connection was possible");
+    return false;
+  } else {
+    if (outDebug) Serial.println("WiFi connected");  
+    if (outDebug) Serial.println("IP address: ");
+    if (outDebug) Serial.println(WiFi.localIP());
+  
+    return mqttReconnect();
   }
 }
 
@@ -252,32 +281,14 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
-  bool connectingWIFI = true;
-  int tries = 0;
-
-  Serial.println("Trying Main WiFi");
-  while ((WiFi.status() != WL_CONNECTED) && (tries < 10)) {
-    delay(500);
-    Serial.print(".");
-    tries++;
-  }
-  Serial.println();
-    
-  if (tries >= 10) {
-    Serial.println("Too many trials, no WiFi connection was possible");
-  } else {
-    Serial.println("");
-    Serial.println("WiFi connected");  
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+  // configure MQTT server
+  client.setServer(broker, 1883);
+  client.setCallback(callback);
   
-    //connect to MQTT server
-    client.setServer(server, 1883);
-    client.setCallback(callback);
-  
-  //  client.connect("dev02", "dev02", "dev02");
-    reconnect();
+  if (connectNetwork()) {
     Serial.println("Network OK");
+  } else {
+    Serial.println("Network Problem. We will try again in Loop");
   }
 
   // Set Relay
@@ -303,39 +314,10 @@ void setup() {
 void loop() {
   viejoEstadoLampara = estadoLampara;
 
-  // First we check if the WiFi is still OK, or we reconnect
-  if (WiFi.status() != WL_CONNECTED) {
-    bool connectingWIFI = true;
-    int tries = 0;
-  
-    Serial.println("Trying Main WiFi");
-    while ((WiFi.status() != WL_CONNECTED) && (tries < 10)) {
-      delay(500);
-      Serial.print(".");
-      tries++;
-    }
-    Serial.println();
-      
-    if (tries >= 10) {
-      Serial.println("Too many trials, no WiFi connection was possible");
-    } else {
-      Serial.println("");
-      Serial.println("WiFi connected");  
-      Serial.println("IP address: ");
-      Serial.println(WiFi.localIP());
-    
-      //connect to MQTT server
-      client.setServer(server, 1883);
-      client.setCallback(callback);    
-      reconnect();
-      Serial.println("Network OK");
-    }
+  if (connectNetwork(false)) {
+    // Serial.println("Loop with Network OK");
   } else {
-    // WiFi is OK, we loop the MQTT client
-    if (!client.connected()) {
-      reconnect();
-    } 
-    client.loop();  
+    Serial.println("Loop with Network Problem. We will try again in next Loop");
   }
 
   // Update Lampara Status and sensors
@@ -346,4 +328,5 @@ void loop() {
      // set the Lampara:
     controlLampara(estadoLampara);
   }
+
 }
