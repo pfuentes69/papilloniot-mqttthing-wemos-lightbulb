@@ -3,7 +3,7 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
-IPAddress broker(192, 168, 2, 101); // Solace
+IPAddress broker(192, 168, 2, 101); // Casa
 
 const int relayPin = D1;
 const int ledPin = D4;
