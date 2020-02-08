@@ -7,7 +7,7 @@ IPAddress broker(192, 168, 2, 101); // Casa
 
 const int relayPin = D1;
 const int ledPin = D4;
-const int buttonPin = D3;
+const int buttonPin = D5;
 const int LDRPin = A0;
 
 const char* ssid     = "Papillon"; //Naviter"; //
@@ -17,7 +17,7 @@ const char* devID = "Lamp1";
 // const char* devUS = "dev02";
 // const char* devPW = "dev02";
 
-const char* devTopic = "PapillonIoT/Lamp1/cmd/+";
+const char* devTopic = "PapillonIoT/Lamp1/+";
 
 const unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
@@ -31,8 +31,8 @@ WiFiClient WIFIclient;
 
 PubSubClient client(WIFIclient);
 
-bool estadoLampara = false;
-bool viejoEstadoLampara = false;
+bool estadoLampara = true;
+bool viejoEstadoLampara = true;
 bool forzarEstado = false;
 int buttonState;             // the current reading from the input pin
 int lastButtonState = LOW;   // the previous reading from the input pin
@@ -70,6 +70,8 @@ void controlRelay (bool OnOff)
 
 void controlLampara (bool OnOff)
 {
+  estadoLampara = OnOff;
+
   if (OnOff) {
     Serial.println("Encender Lampara");
     controlLED(false);
@@ -170,6 +172,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   Serial.println("Command: " + sCommand);
 
+  if (sCommand == "set") {
+      if (sPayload == "ON") {
+        controlLampara(true);
+      } else {
+        controlLampara(false);
+      }
+  }
+
+/*
   if (sCommand == "ledoff") {
       if (sPayload == "ON") {
         controlLED(true);
@@ -214,7 +225,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   } else {    
       Serial.println("Invalid command!");
   }
-
+*/
 }
 
 bool mqttReconnect() {
@@ -267,6 +278,20 @@ bool connectNetwork(bool outDebug = true) {
   }
 }
 
+void notificarBroker(bool OnOff) {
+  String payload = "{\"state\":";
+  if (OnOff)
+    payload += "\"ON\"";
+  else
+    payload += "\"OFF\"";
+  payload += "}";
+
+  Serial.println(payload);
+ 
+  client.publish("PapillonIoT/Lamp1/status", (char*) payload.c_str());
+
+}
+
 /////////////////////////////////////
 //
 // Setup board
@@ -284,7 +309,7 @@ void setup() {
   // configure MQTT server
   client.setServer(broker, 1883);
   client.setCallback(callback);
-  
+
   if (connectNetwork()) {
     Serial.println("Network OK");
   } else {
@@ -302,6 +327,7 @@ void setup() {
 
   // Estado inicial
   controlLampara(estadoLampara);
+  notificarBroker(estadoLampara);
   Serial.println("<<<<< SETUP END >>>>>");
 }
 
@@ -316,6 +342,7 @@ void loop() {
 
   if (connectNetwork(false)) {
     // Serial.println("Loop with Network OK");
+    client.loop();
   } else {
     Serial.println("Loop with Network Problem. We will try again in next Loop");
   }
@@ -327,6 +354,7 @@ void loop() {
   if (estadoLampara != viejoEstadoLampara) {
      // set the Lampara:
     controlLampara(estadoLampara);
+    notificarBroker(estadoLampara);
   }
 
 }
